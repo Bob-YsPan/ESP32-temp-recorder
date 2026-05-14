@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ESP32 Temp/Hum Monitor</title>
+  <link rel="stylesheet" href="/bootstrap.min.css">
+  <style>
+    body {
+      padding-top: 50px;
+      background-color: #f5f5f5;
+      font-size: 16px;
+    }
+
+    /* 針對老舊瀏覽器與 Bootstrap 2 的置中與寬度控制 */
+    .monitor-container {
+      margin-left: auto;
+      margin-right: auto;
+      width: 250px; /* 固定寬度符合你的需求 */
+      background: white;
+      padding: 15px;
+      border: 1px solid #ddd;
+      -webkit-border-radius: 4px;
+        -moz-border-radius: 4px;
+              border-radius: 4px;
+    }
+
+    .text-center {
+      text-align: center;
+    }
+
+    /* 表格內的垂直置中 */
+    .table-vcenter td {
+      vertical-align: middle !important;
+      text-align: center;
+      font-size: 28px;
+    }
+
+    .icon-img {
+      width: 42px; /* 稍微縮小以配合 250px 的容器 */
+      height: 42px;
+      vertical-align: middle;
+      border: 0;
+    }
+
+    /* 調整按鈕在舊版寬度 */
+    .btn-full {
+      width: 100%;
+      padding-left: 0;
+      padding-right: 0;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="container-fluid">
+    <div class="row-fluid">
+      <div class="monitor-container">
+        
+        <h3 class="text-center">ESP32 Monitor</h3>
+        
+        <!-- 使用帶邊框的表格，在 Bootstrap 2 中最穩定 -->
+        <table class="table table-striped table-vcenter">
+          <tbody>
+            <tr>
+              <td width="50"><img src="/temp.png" alt="Temp" class="icon-img"></td>
+              <td><span id="temperature">-- ℃</span></td>
+            </tr>
+            <tr>
+              <td><img src="/hum.png" alt="Hum" class="icon-img"></td>
+              <td><span id="humidity">-- %</span></td>
+            </tr>
+            <tr>
+              <td><img src="/pres.png" alt="Pres" class="icon-img"></td>
+              <td><span id="pressure">-- hPa</span></td>
+            </tr>
+            <tr>
+              <td><img src="/conn.png" alt="MQTT" class="icon-img"></td>
+              <td><span id="mqtt_status">?</span></td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="text-center">
+          <p class="muted">
+            <small id="time">Data Time: --:--:--</small>
+          </p>
+          <hr>
+          <!-- Bootstrap 2 的按鈕類別 -->
+          <button class="btn btn-primary btn-full" type="button" onclick="location.href='https://io.adafruit.com/your_username/your_dashboard'">
+            Visit Adafruit IO
+          </button>
+        </div>
+        
+      </div>
+    </div>
+  </div>
+  <script>
+    function padZero(num) {
+      return (num < 10 ? '0' : '') + num;
+    }
+    function updateData() {
+      var xhr = new XMLHttpRequest();
+      xhr.open("GET", "/data", true);
+      xhr.onload = function () {
+        if (xhr.status == 200) {
+          var data = JSON.parse(xhr.responseText);
+          document.getElementById("temperature").innerText = data.temp.toFixed(1) + " ℃";
+          document.getElementById("humidity").innerText = data.hum.toFixed(1) + " %";
+          document.getElementById("pressure").innerText = data.pres.toFixed(2) + " hPa";
+          document.getElementById("time").innerText = "Data Time: " + padZero(data.hour) + ":" + padZero(data.min) + ":" + padZero(data.sec);
+        }
+        else {
+          document.getElementById("temperature").innerText = "-- ℃";
+          document.getElementById("humidity").innerText = "-- %";
+          document.getElementById("pressure").innerText = "-- hPa";
+          document.getElementById("time").innerText = "Data Time: --:--:--";
+        }
+      };
+      xhr.send();
+    }
+    function updateStatus() {
+      var xhr = new XMLHttpRequest();
+      xhr.open("GET", "/status", true);
+      xhr.onload = function () {
+        if (xhr.status == 200) {
+          document.getElementById("mqtt_status").innerText = xhr.responseText;
+        }
+        else {
+          document.getElementById("mqtt_status").innerText = "?";
+        }
+      };
+      xhr.send();
+    }
+
+    setInterval(updateData, 15000); // 每15秒更新一次數據
+    setInterval(updateStatus, 15000); // 每15秒更新一次狀態
+
+    window.onload = function () {
+      updateData();
+      updateStatus();
+    };
+  </script>
+</body>
+
+</html>
