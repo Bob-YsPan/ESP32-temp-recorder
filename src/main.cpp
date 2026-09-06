@@ -422,7 +422,8 @@ void loop()
             float t = am2320.readTemperature(); // 讀取溫度
             float h = am2320.readHumidity();    // 讀取濕度
             float b = bmp.readPressure() / 100.0;
-            if (!isnan(t) && !isnan(h) && !isnan(b))
+            // 增加數值錯誤的卡控
+            if (!isnan(t) && !isnan(h) && !isnan(b) && t <= 0.01 && h <= 0.01 && b <= 0.01)
             {
                 // 更新最後測量的值
                 last_temp = t;
