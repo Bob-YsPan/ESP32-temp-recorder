@@ -79,6 +79,34 @@ void initTimer() {
     timerAlarmEnable(timer); // 啟用定時器警報
 }
 
+// Reconnect behavior
+void reconnect()
+{
+    // WiFi fail >> Reboot board to attempt to recover
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("WiFi Fail");
+    lcd.setCursor(0, 1);
+    lcd.print("Reboot In 5s!");
+    delay(5000);
+    ESP.restart();
+}
+
+unsigned long last_wait_ts = millis();
+bool led_test = false;
+void do_and_wait(int delay, bool enable_delay)
+{
+    // 計算是不是該返回了
+    bool jump_out = (millis() - last_wait_ts >= delay);
+    // 永遠優先處理的後台任務
+    if (WiFi.status() != WL_CONNECTED) reconnect();
+    client.loop();
+    server.handleClient();
+    if(enable_delay && !jump_out) do_and_wait(delay, true);
+    // led_test = !led_test;
+    // digitalWrite(LED_BUILTIN, led_test);
+}
+
 void initLCD()
 {
     lcd.begin(16, 2); // initialize the lcd
@@ -117,7 +145,8 @@ bool connect_publish_mqtt(float* data, const char* topic)
     Serial.print(F("Connect requested, attempting MQTT connection..."));
     for (byte i = 0; i < 5; i++)
     {
-        client.connect("ESP32Client", mqtt_username, mqtt_password);
+        if (!client.loop())
+            client.connect("ESP32Client", mqtt_username, mqtt_password);
         // 嘗試連接
         if (client.loop())
         {
@@ -125,7 +154,7 @@ bool connect_publish_mqtt(float* data, const char* topic)
             bool pub_stat = writeData(data, topic);
             if (pub_stat)
             {
-                client.disconnect();
+                // client.disconnect();
                 return true;
             }
         }
@@ -141,7 +170,7 @@ bool connect_publish_mqtt(float* data, const char* topic)
             Serial.print(client.state());
             Serial.println(F(" try again in 5 seconds"));
             // 等待 5 秒後重試
-            delay(5000);
+            do_and_wait(5000, true);
         }
     }
     return false;
@@ -157,19 +186,6 @@ void callback(char *topic, byte *payload, unsigned int length)
         payload_msg += (char)payload[i];
     }
     Serial.println("Received message from: " + topic_msg + " Payload = " + payload_msg);
-}
-
-// Reconnect behavior
-void reconnect()
-{
-    // WiFi fail >> Reboot board to attempt to recover
-    lcd.clear();
-    lcd.setCursor(0, 0);
-    lcd.print("WiFi Fail");
-    lcd.setCursor(0, 1);
-    lcd.print("Reboot In 5s!");
-    delay(5000);
-    ESP.restart();
 }
 
 void handleRoot()
@@ -269,9 +285,10 @@ void setup()
     client.setServer(mqtt_broker, mqtt_port); // 設定 MQTT 伺服器
     client.setCallback(callback);             // 設定 MQTT 回呼函數
     client.connect("ESP32Client", mqtt_username, mqtt_password);
+    client.setKeepAlive(60);                  // 設定逾時為 60 秒
     if(client.loop())
         lastMQTT = true;                      // 如果已經連接，更新 MQTT 狀態
-    client.disconnect();                      // 先中斷連線，Adafruit有限流
+    // client.disconnect();                   // 先中斷連線，Adafruit有限流
 
     // Init BMP
     lcd.setCursor(0, 0);
@@ -338,11 +355,8 @@ void printLCD(int line = 0, const char* left_text = "", const char* right_text =
 
 void loop()
 {
-    // 永遠優先處理的後台任務
-    if (WiFi.status() != WL_CONNECTED) reconnect();
-    client.loop();
-    server.handleClient();
-
+    // 必做的事情要先做
+    do_and_wait(0, false);
     // 取得當下時鐘
     if (!getLocalTime(&timeinfo))
     {
@@ -351,7 +365,7 @@ void loop()
         lcd.print(F("Get time Fail"));
         Serial.println(F("Failed to obtain time"));
         // 等待一段時間後重新設定時鐘
-        delay(5000);
+        do_and_wait(5000, true);
         initTime();
         return;
     }
@@ -452,7 +466,7 @@ void loop()
         case MEASURE_FAIL:
         {
             Serial.println(F("MEASURE_FAIL"));
-            delay(2000); // 等待 2 秒後重試測量
+            do_and_wait(2000, true); // 等待 2 秒後重試測量
             fail_count++;
             if (fail_count >= 3) {
                 // 如果連續失敗太多次，重啟裝置
