@@ -33,6 +33,9 @@ bool isDate = false;                                   // 是否展示日期的�
 bool lastMQTT = false;                                 // 上一次MQTT的狀態
 int fail_count = 0;                                     // 連線失敗次數
 
+// Client ID
+String clientId = "ESP32-Monitor";
+
 // 大迴圈狀態機
 enum State { IDLE, SYNC_TIME, UPDATE_OK, MEASURE, MEASURE_OK, MEASURE_FAIL, UPLOAD };
 State currentState = SYNC_TIME;
@@ -146,7 +149,7 @@ bool connect_publish_mqtt(float* data, const char* topic)
     for (byte i = 0; i < 5; i++)
     {
         if (!client.loop())
-            client.connect("ESP32Client", mqtt_username, mqtt_password);
+            client.connect(clientId.c_str(), mqtt_username, mqtt_password);
         // 嘗試連接
         if (client.loop())
         {
@@ -282,9 +285,11 @@ void setup()
 
     lcd.setCursor(0, 0);
     lcd.print(F("MQTT init..."));
+    clientId += "-";
+    clientId += String((uint32_t)ESP.getEfuseMac(), HEX);
     client.setServer(mqtt_broker, mqtt_port); // 設定 MQTT 伺服器
     client.setCallback(callback);             // 設定 MQTT 回呼函數
-    client.connect("ESP32Client", mqtt_username, mqtt_password);
+    client.connect(clientId.c_str(), mqtt_username, mqtt_password);
     client.setKeepAlive(60);                  // 設定逾時為 60 秒
     if(client.loop())
         lastMQTT = true;                      // 如果已經連接，更新 MQTT 狀態
