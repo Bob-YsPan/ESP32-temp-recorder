@@ -138,7 +138,7 @@ bool writeData(float* data, const char* topic)
     Serial.print(data_str);
     Serial.print(F(": "));
     Serial.println(success);
-    return client.loop();
+    return success;
 }
 
 
@@ -289,11 +289,7 @@ void setup()
     clientId += String((uint32_t)ESP.getEfuseMac(), HEX);
     client.setServer(mqtt_broker, mqtt_port); // 設定 MQTT 伺服器
     client.setCallback(callback);             // 設定 MQTT 回呼函數
-    client.connect(clientId.c_str(), mqtt_username, mqtt_password);
     client.setKeepAlive(60);                  // 設定逾時為 60 秒
-    if(client.loop())
-        lastMQTT = true;                      // 如果已經連接，更新 MQTT 狀態
-    // client.disconnect();                   // 先中斷連線，Adafruit有限流
 
     // Init BMP
     lcd.setCursor(0, 0);
@@ -329,6 +325,10 @@ void setup()
     server.begin();                 // 啟動 Web 伺服器
     digitalWrite(LED_BUILTIN, LOW); // 測試完成，熄滅LED
     initTimer(); // 初始化定時器 (11/15 Timer Fix)
+
+    // 最後一步才接MQTT，準備銜接 client.loop()
+    client.connect(clientId.c_str(), mqtt_username, mqtt_password);
+    if(client.loop()) lastMQTT = true;                      // 如果已經連接，更新 MQTT 狀態
 }
 
 void printLCD(int line = 0, const char* left_text = "", const char* right_text = "")
@@ -453,6 +453,7 @@ void loop()
                 last_sec = now_sec;
                 digitalWrite(LED_BUILTIN, LOW);  // 關閉 LED
                 fail_count = 0; // 重置失敗計數器
+                // 如果是要上傳的時機，跳去上傳，否則去等待秒數
                 if (now_min % 6 == 0 && now_sec == 0) currentState = UPLOAD;
                 else currentState = MEASURE_OK;
                 digitalWrite(LED_BUILTIN, LOW);  // 關閉 LED
@@ -486,9 +487,9 @@ void loop()
         }
         case MEASURE_OK:
         {
-            // Serial.println(F("MEASURE_OK"));
             // 等待時間不等於0秒才切換狀態，避免重複測量
             if (now_sec % 30 != 0) {
+                Serial.println(F("MEASURE_OK -> UPDATE_OK"));
                 currentState = UPDATE_OK;
             }
             break;
@@ -523,18 +524,24 @@ void loop()
                 Serial.println("Fail!");
             }
             digitalWrite(LED_BUILTIN, LOW);  // 關閉 LED
-            currentState = UPDATE_OK;
+            currentState = MEASURE_OK;  // 跳到 UPDATE OK 會發生重複上傳，因此到 MEASURE OK 等待
             break;
         }
         case UPDATE_OK:
         {
-            // Serial.println(F("UPDATE_OK"));
             print_time = true; // 工作完成，恢復顯示時間
             // 等待時間不再等於0分才切換狀態，避免重複校時
             if (now_min != 0) 
+            {
                 currentState = IDLE;
+                Serial.println(F("UPDATE_OK -> IDLE"));
+            }
             // 每30秒還是需要量測一次數據並更新在記憶體
-            else if (now_sec % 30 == 0) currentState = MEASURE;
+            else if (now_sec % 30 == 0)
+            {
+                currentState = MEASURE;
+                Serial.println(F("UPDATE_OK -> MEASURE"));
+            }
             break;
         }
     }
