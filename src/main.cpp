@@ -95,19 +95,19 @@ void reconnect()
     ESP.restart();
 }
 
-unsigned long last_wait_ts = millis();
-bool led_test = false;
 void do_and_wait(int delay, bool enable_delay)
 {
-    // 計算是不是該返回了
-    bool jump_out = (millis() - last_wait_ts >= delay);
-    // 永遠優先處理的後台任務
-    if (WiFi.status() != WL_CONNECTED) reconnect();
-    client.loop();
-    server.handleClient();
-    if(enable_delay && !jump_out) do_and_wait(delay, true);
-    // led_test = !led_test;
-    // digitalWrite(LED_BUILTIN, led_test);
+    unsigned long start_wait_ts = millis();
+    bool wait = true;
+    do
+    {
+        // 計算是不是該返回了
+        wait = ((millis() - start_wait_ts) < delay);
+        // 永遠優先處理的後台任務
+        if (WiFi.status() != WL_CONNECTED) reconnect();
+        client.loop();
+        server.handleClient();
+    } while (wait && delay);
 }
 
 void initLCD()
@@ -370,7 +370,7 @@ void loop()
         lcd.print(F("Get time Fail"));
         Serial.println(F("Failed to obtain time"));
         // 等待一段時間後重新設定時鐘
-        do_and_wait(5000, true);
+        do_and_wait(1000, true);
         initTime();
         return;
     }
